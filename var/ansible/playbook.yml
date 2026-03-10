@@ -1,0 +1,106 @@
+---
+# run bootstrap scripts in order inside the VM
+- name: Bootstrap observability lab VM
+  hosts: all
+  become: true
+  vars:
+    lab_user: vagrant
+    lab_dir: /home/vagrant/observability-lab
+    scripts_dir: "{{ playbook_dir }}/../scripts/bootstrap"
+    kubernetes_cluster_type: "{{ lookup('env', 'kubernetes_cluster_type') | default('k3s', true) }}"
+
+  tasks:
+    - name: Run base system setup
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/00-base.sh"
+      args:
+        creates: /etc/observability-lab/.base-done
+
+    - name: Run Docker install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/01-docker.sh"
+      args:
+        creates: /usr/bin/docker
+
+    - name: Run kubectl install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/02-kubectl.sh"
+      args:
+        creates: /usr/bin/kubectl
+
+    - name: Run Helm install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/03-helm.sh"
+      args:
+        creates: /usr/local/bin/helm
+
+    - name: Run k3s install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/04-k3s.sh"
+      args:
+        creates: /etc/observability-lab/.k3s-done
+      when: kubernetes_cluster_type == "k3s"
+
+    - name: Run kind install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/06-kind.sh"
+      args:
+        creates: /usr/local/bin/kind
+      when: kubernetes_cluster_type == "kind"
+
+    - name: Create kind cluster
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/07-kind-cluster.sh"
+      when: kubernetes_cluster_type == "kind"
+
+    - name: Run aditional tools install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/05-tools.sh"
+      args:
+        creates: /etc/observability-lab/.tools-done
+
+    - name: Run sops and gcloud install
+      ansible.builtin.script:
+        cmd: "{{ scripts_dir }}/08-sops-gcp.sh"
+      args:
+        creates: /etc/observability-lab/.sops-gcp-done
+
+    - name: Make lab scripts executable
+      ansible.builtin.file:
+        path: "{{ item }}"
+        mode: "0755"
+        recurse: false
+      loop:
+        - "{{ lab_dir }}/var/scripts/lab-load"
+        - "{{ lab_dir }}/var/scripts/lab-validate"
+        - "{{ lab_dir }}/var/scripts/bootstrap/06-kind.sh"
+        - "{{ lab_dir }}/var/scripts/bootstrap/07-kind-cluster.sh"
+        - "{{ lab_dir }}/var/scripts/resolve-kubeconfig.sh"
+        - "{{ lab_dir }}/var/scripts/validate/check-app.sh"
+        - "{{ lab_dir }}/var/scripts/validate/check-metrics.sh"
+        - "{{ lab_dir }}/var/scripts/validate/check-logs.sh"
+        - "{{ lab_dir }}/var/scripts/validate/check-hpa.sh"
+        - "{{ lab_dir }}/var/scripts/validate/check-hpa-scale.sh"
+        - "{{ lab_dir }}/var/scripts/resolve-kube-context.sh"
+        - "{{ lab_dir }}/var/scripts/kube-env.sh"
+        - "{{ lab_dir }}/var/scripts/ingress-op.sh"
+        - "{{ lab_dir }}/var/scripts/with-sops-gcp.sh"
+
+    - name: Add lab scripts to PATH in .bashrc
+      ansible.builtin.lineinfile:
+        path: "/home/{{ lab_user }}/.bashrc"
+        line: "export PATH=\"{{ lab_dir }}/var/scripts:$HOME/.local/bin:$PATH\""
+        state: present
+        create: true
+        owner: "{{ lab_user }}"
+        group: "{{ lab_user }}"
+        mode: "0644"
+
+    - name: Print bootstrap summary
+      ansible.builtin.debug:
+        msg: |
+          Bootstrap complete.
+          Cluster type: {{ kubernetes_cluster_type }}
+          Next:
+            cd {{ lab_dir }}
+            task deploy:all ENV=dev KUBE_CONTEXT=default

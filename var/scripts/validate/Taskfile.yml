@@ -1,0 +1,106 @@
+version: "3"
+
+# smoke tests for app, metrics, logs and HPA
+vars:
+  SCRIPTS_DIR: var/scripts
+  KUBE_CONTEXT_INPUT: '{{.KUBE_CONTEXT | default (env "KUBE_CONTEXT")}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  app:
+    desc: Validate mandatory endpoints and app pod health (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:app ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        ENV="${env_name}" KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/validate/check-app.sh
+
+  metrics:
+    desc: Validate Prometheus scraping (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:metrics ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        ENV="${env_name}" KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/validate/check-metrics.sh
+
+  logs:
+    desc: Validate ELK log pipeline (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:logs ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        ENV="${env_name}" KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/validate/check-logs.sh
+
+  hpa:
+    desc: Validate HPA configuration and scaling readiness (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:hpa ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        ENV="${env_name}" KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/validate/check-hpa.sh
+
+  hpa-scale:
+    desc: Run load and validate HPA scale-out (ENV required, default DURATION=90)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:hpa-scale ENV=dev [KUBE_CONTEXT=default] [DURATION=90]"
+    vars:
+      DURATION: '{{.DURATION | default "90"}}'
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        DURATION="{{.DURATION}}" KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/validate/check-hpa-scale.sh
+
+  rollout:
+    desc: Validate rollout status (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:rollout ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" rollout status deployment/observability-app -n app --timeout=180s
+
+  namespaces:
+    desc: Validate required namespaces exist (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:namespaces ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" get namespace app monitoring logging
+
+  inspect:
+    desc: Cluster inspection helper (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:inspect ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" get nodes -o wide
+        kubectl --context "${kube_context}" get pods -A --field-selector=metadata.namespace!=kube-system
+        kubectl --context "${kube_context}" get hpa -A
+
+  all:
+    desc: Run all smoke validations (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task validate:all ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        ENV="${env_name}" KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/lab-validate

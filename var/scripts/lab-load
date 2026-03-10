@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# send traffic to trigger HPA scaleout
+# auto port-foward if no --target given, KUBE_CONTEXT required in that case
+
+set -euo pipefail
+
+DURATION=120
+TARGET=""
+PF_PID=""
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
+
+usage() {
+  echo "Usage: lab-load [--duration SECONDS] [--target URL]"
+  echo ""
+  echo "  --duration  SECONDS  Duration of load test (default: 120)"
+  echo "  --target    URL      App URL (default: auto port-forward)"
+  echo "  KUBE_CONTEXT         Required when --target is not set"
+  exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --duration) DURATION="$2"; shift 2 ;;
+    --target)   TARGET="$2"; shift 2 ;;
+    --help|-h)  usage ;;
+    *) echo "Unknown option: $1"; usage ;;
+  esac
+done
+
+if [[ -z "${TARGET}" ]]; then
+  if [[ -z "${KUBE_CONTEXT}" ]]; then
+    echo "[lab-load] KUBE_CONTEXT is required when --target is not provided." >&2
+    exit 1
+  fi
+  echo "[lab-load] Setting up port-forward to app service..."
+  kubectl --context "${KUBE_CONTEXT}" port-forward svc/observability-app -n app 18080:8080 > /tmp/lab-load-pf.log 2>&1 &
+  PF_PID=$!
+  sleep 2
+  TARGET="http://localhost:18080"
+  echo "[lab-load] Port-forward PID: ${PF_PID}"
+fi
+
+cleanup() {
+  echo ""
+  echo "[lab-load] Stopping..."
+  if [[ -n "${PF_PID}" ]]; then
+    kill "${PF_PID}" 2>/dev/null || true
+  fi
+  echo "[lab-load] Done. Total requests sent: ${COUNT}"
+}
+trap cleanup EXIT INT TERM
+
+echo "[lab-load] Target:   ${TARGET}"
+echo "[lab-load] Duration: ${DURATION}s"
+echo "[lab-load] Pattern:  /request x5, /slow x1, /error x2 (per cycle)"
+if [[ -n "${KUBE_CONTEXT}" ]]; then
+  echo "[lab-load] Watch HPA: kubectl --context ${KUBE_CONTEXT} get hpa -n app -w"
+else
+  echo "[lab-load] Watch HPA: kubectl get hpa -n app -w"
+fi
+echo ""
+
+COUNT=0
+START=$(date +%s)
+END=$((START + DURATION))
+
+while [[ $(date +%s) -lt ${END} ]]; do
+  for _ in 1 2 3 4 5; do
+    curl -sf "${TARGET}/request" > /dev/null 2>&1 || true
+    COUNT=$((COUNT + 1))
+  done
+
+  curl -sf "${TARGET}/slow" > /dev/null 2>&1 || true
+  COUNT=$((COUNT + 1))
+
+  for _ in 1 2; do
+    curl -s "${TARGET}/error" > /dev/null 2>&1 || true
+    COUNT=$((COUNT + 1))
+  done
+
+  ELAPSED=$(( $(date +%s) - START ))
+  REMAINING=$((DURATION - ELAPSED))
+  echo "[lab-load] ${ELAPSED}s elapsed | ~${REMAINING}s remaining | ${COUNT} requests sent"
+  sleep 1
+done

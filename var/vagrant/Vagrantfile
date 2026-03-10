@@ -1,0 +1,54 @@
+# run from var/vagrant/ directory: cd var/vagrant && vagrant up
+Vagrant.configure("2") do |config|
+  # defalt is k3s, set kubernetes_cluster_type=kind to use kind
+  cluster_type = ENV["kubernetes_cluster_type"] || "k3s"
+
+  config.vm.box = "debian/bookworm64"
+  config.vm.box_check_update = false
+
+  config.vm.hostname = "observability-lab"
+
+  # stable VM IP
+  config.vm.network "private_network", ip: "192.168.56.10"
+
+  # forwarded ports
+  config.vm.network "forwarded_port", guest: 80, host: 80, host_ip: "127.0.0.1"  # http ingress
+  config.vm.network "forwarded_port", guest: 443, host: 443, host_ip: "127.0.0.1"  # https ingress
+
+  # sync repo into the VM
+  config.vm.synced_folder "../../", "/home/vagrant/observability-lab",
+    type: "rsync",
+    rsync__exclude: [".git/", ".vagrant/", ".task/", "charts/"]
+
+  # VM specs
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = false
+    vb.name = "observability-lab"
+    vb.memory = 8192
+    vb.cpus = 4
+
+    # use host DNS, important for package downloads
+    vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+    vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+    vb.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+  end
+
+  # install ansible inside the VM and provision localy
+  config.vm.provision "shell", inline: <<-SHELL
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq ansible
+  SHELL
+
+  config.vm.provision "ansible_local" do |ansible|
+    ansible.playbook = "var/ansible/playbook.yml"
+    ansible.inventory_path = "var/ansible/inventory.ini"
+    ansible.limit = "all"
+    ansible.verbose = false
+    ansible.provisioning_path = "/home/vagrant/observability-lab"
+    ansible.extra_vars = {
+      kubernetes_cluster_type: cluster_type
+    }
+  end
+end

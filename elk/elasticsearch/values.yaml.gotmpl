@@ -1,0 +1,60 @@
+# Elasticsearch Helm values for observability lab
+# Chart: elastic/elasticsearch
+# Deploy with: task elk:apply ENV=dev
+#
+# single-node - cluster will stay yellow (no replica shards), thats fine for a lab
+
+clusterName: observability-lab
+nodeGroup: master
+
+# password comes from sops encrypted file
+secret:
+  enabled: true
+  password: '{{ fetchSecretValue "ref+sops://elasticsearch/secrets.enc.sops.yaml#/elasticsearch_password" }}'
+
+# Single-node setup - yellow cluster status is expected
+replicas: 1
+minimumMasterNodes: 1
+
+# Reduce startup time for lab by accepting yellow status
+clusterHealthCheckParams: "wait_for_status=yellow&timeout=1s"
+
+# Heap and resource sizing for a VM with 6 GB total
+# Elasticsearch rule of thumb: heap = 50% of available memory, max 32 GB
+esJavaOpts: "-Xmx1g -Xms1g"
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1.5Gi"
+  limits:
+    cpu: "1000m"
+    memory: "2Gi"
+
+# No persistent volume - data is lost on pod restart (acceptable for lab)
+persistence:
+  enabled: false
+
+# Minimal volume claims (overridden by persistence: false but kept for reference)
+volumeClaimTemplate:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi
+
+service:
+  type: ClusterIP
+  port: 9200
+
+# Health checks
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+startupProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30

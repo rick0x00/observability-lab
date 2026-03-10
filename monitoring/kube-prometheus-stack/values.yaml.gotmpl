@@ -1,0 +1,122 @@
+# kube-prometheus-stack Helm values for the observability lab
+# Deploy with: task monitoring:apply ENV=dev
+#
+# sizing is reduced for single-node lab - increase limits for real envs
+
+# prometheus
+prometheus:
+  prometheusSpec:
+    # Retention and storage
+    retention: 24h
+    storageSpec: {}  # No persistent volume - data is ephemeral in the lab
+
+    # Allow Prometheus to scrape all namespaces for PodMonitor/ServiceMonitor
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+
+    # Annotation-based scraping for pods with prometheus.io/scrape: "true"
+    # This picks up the app pod without needing a ServiceMonitor CRD.
+    additionalScrapeConfigs:
+      - job_name: kubernetes-pods
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: "true"
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  service:
+    type: ClusterIP
+
+# grafana
+grafana:
+  # password comes from sops encrypted file
+  adminPassword: '{{ fetchSecretValue "ref+sops://kube-prometheus-stack/secrets.enc.sops.yaml#/grafana_admin_password" }}'
+
+  persistence:
+    enabled: false  # Ephemeral in lab; dashboards loaded from ConfigMap
+
+  # Enable ConfigMap-based dashboard provisioning (sidecar pattern)
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+
+  # Grafana resource sizing for lab
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
+  service:
+    type: ClusterIP
+
+  # Grafana.ini overrides
+  grafana.ini:
+    server:
+      root_url: "http://localhost:3000"
+    auth.anonymous:
+      enabled: false
+
+# alertmanager
+alertmanager:
+  alertmanagerSpec:
+    storage: {}  # No persistent volume
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+
+# node exporter + kube-state-metrics - minimal resources, lab only
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi

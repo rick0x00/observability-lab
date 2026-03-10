@@ -1,0 +1,18 @@
+# ingress-nginx values - NodePort so vagrant port mapping works without LB
+controller:
+  replicaCount: 1
+  ingressClassResource:
+    name: nginx
+    enabled: true
+    default: false
+  ingressClass: nginx
+  service:
+    type: NodePort
+    nodePorts:
+      http: 30080
+      https: 30443
+  metrics:
+    enabled: true
+
+defaultBackend:
+  enabled: true

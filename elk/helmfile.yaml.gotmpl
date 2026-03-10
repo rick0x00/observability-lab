@@ -1,0 +1,102 @@
+# repositories
+repositories:
+  - name: elastic
+    url: https://helm.elastic.co
+
+# default namespace for all ELK releases
+templates:
+  default-release: &default-release
+    namespace: logging
+
+# per-env kubeContext and release metadata
+environments:
+  dev:
+    values:
+      - kubeContext: default
+        host: ""
+        releases:
+          elasticsearch:
+            version: ""
+            <<: *default-release
+          logstash:
+            version: ""
+            <<: *default-release
+          kibana:
+            version: ""
+            <<: *default-release
+          filebeat:
+            version: ""
+            <<: *default-release
+
+  stag:
+    values:
+      - kubeContext: k3s-stag
+        host: ""
+        releases:
+          elasticsearch:
+            version: ""
+            <<: *default-release
+          logstash:
+            version: ""
+            <<: *default-release
+          kibana:
+            version: ""
+            <<: *default-release
+          filebeat:
+            version: ""
+            <<: *default-release
+
+  prod:
+    values:
+      - kubeContext: k8s-prod
+        host: ""
+        releases:
+          elasticsearch:
+            version: ""
+            <<: *default-release
+          logstash:
+            version: ""
+            <<: *default-release
+          kibana:
+            version: ""
+            <<: *default-release
+          filebeat:
+            version: ""
+            <<: *default-release
+
+---
+# shared template
+templates:
+  default: &default
+    kubeContext: '{{ .Values.kubeContext }}'
+    version: '{{`{{ .Values | get "releases" | get .Release.Name | get "version" }}`}}'
+    namespace: '{{`{{ .Values | get "releases" | get .Release.Name | get "namespace" }}`}}'
+    values:
+      - ./{{`{{ .Release.Name }}`}}/values.yaml.gotmpl
+      - ./{{`{{ .Release.Name }}`}}/values-{{ .Environment.Name }}.yaml
+
+# deploy order matters: ES first, then kibana+logstash, then filebeat
+releases:
+  - chart: elastic/elasticsearch
+    name: elasticsearch
+    <<: *default
+    createNamespace: true
+
+  - chart: elastic/kibana
+    name: kibana
+    <<: *default
+    needs:
+      - '{{ .Values | get "releases" | get "elasticsearch" | get "namespace" }}/elasticsearch'
+
+  - chart: elastic/logstash
+    name: logstash
+    <<: *default
+    needs:
+      - '{{ .Values | get "releases" | get "elasticsearch" | get "namespace" }}/elasticsearch'
+
+  # filebeat waits for logstash to be up
+  - chart: elastic/filebeat
+    name: filebeat
+    <<: *default
+    needs:
+      - '{{ .Values | get "releases" | get "logstash" | get "namespace" }}/logstash'

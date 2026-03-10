@@ -1,0 +1,57 @@
+# Kibana Helm values for observability lab
+# Chart: elastic/kibana
+# Deploy with: task elk:apply ENV=dev (after Elasticsearch is healthy)
+
+# Must match Elasticsearch version
+elasticsearchHosts: "https://observability-lab-master:9200"
+elasticsearchCertificateSecret: "observability-lab-master-certs"
+elasticsearchCertificateAuthoritiesFile: "ca.crt"
+elasticsearchCredentialSecret: "observability-lab-master-credentials"
+
+# Kibana resources
+resources:
+  requests:
+    cpu: "100m"
+    memory: "512Mi"
+  limits:
+    cpu: "500m"
+    memory: "1Gi"
+
+# Replicas - single instance for lab
+replicas: 1
+
+# No persistence needed for lab
+persistence:
+  enabled: false
+
+# Kibana configuration
+kibanaConfig:
+  kibana.yml: |
+    server.host: "0.0.0.0"
+    server.shutdownTimeout: "5s"
+    elasticsearch.hosts: ["https://observability-lab-master:9200"]
+    monitoring.ui.container.elasticsearch.enabled: true
+    xpack.encryptedSavedObjects.encryptionKey: '{{ fetchSecretValue "ref+sops://kibana/secrets.enc.sops.yaml#/xpack_encrypted_saved_objects_key" }}'
+    xpack.security.encryptionKey: '{{ fetchSecretValue "ref+sops://kibana/secrets.enc.sops.yaml#/xpack_security_key" }}'
+    xpack.reporting.encryptionKey: '{{ fetchSecretValue "ref+sops://kibana/secrets.enc.sops.yaml#/xpack_reporting_key" }}'
+    # Disable telemetry
+    telemetry.enabled: false
+
+service:
+  type: ClusterIP
+  port: 5601
+
+# Probe endpoint used by chart exec checks.
+healthCheckPath: "/login"
+
+readinessProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+
+startupProbe:
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 30

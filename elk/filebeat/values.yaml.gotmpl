@@ -1,0 +1,79 @@
+# Filebeat Helm values for observability lab
+# runs as DaemonSet, reads container logs and ships to logstash
+
+daemonset:
+  filebeatConfig:
+    filebeat.yml: |
+      filebeat.inputs:
+        - type: container
+          enabled: true
+          paths:
+            - /var/log/containers/*.log
+          processors:
+            - add_kubernetes_metadata:
+                host: ${NODE_NAME}
+                matchers:
+                  - logs_path:
+                      logs_path: "/var/log/containers/"
+
+      filebeat.autodiscover:
+        providers:
+          - type: kubernetes
+            node: ${NODE_NAME}
+            hints.enabled: true
+            hints.default_config:
+              type: container
+              paths:
+                - /var/log/containers/*${data.kubernetes.container.id}.log
+
+      output.logstash:
+        hosts: ["logstash-logstash:5044"]
+        bulk_max_size: 512
+
+      monitoring.enabled: false
+
+      logging.level: info
+      logging.to_files: false
+
+  extraEnvs:
+    - name: NODE_NAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+  # We send logs to Logstash; disable default Elasticsearch cert mount.
+  secretMounts: []
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+
+  tolerations:
+    - key: node-role.kubernetes.io/control-plane
+      operator: Exists
+      effect: NoSchedule
+    - key: node-role.kubernetes.io/master
+      operator: Exists
+      effect: NoSchedule
+
+  securityContext:
+    runAsUser: 0
+
+# Keep Filebeat readiness local to the agent process.
+# Output connectivity to Logstash can flap during stack upgrades.
+readinessProbe:
+  exec:
+    command:
+      - sh
+      - -c
+      - |
+        #!/usr/bin/env bash -e
+        curl --fail 127.0.0.1:5066
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3

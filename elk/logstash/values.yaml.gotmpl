@@ -1,0 +1,143 @@
+# Logstash Helm values for observability lab
+# pipeline is inline here - logstash.conf in elk/ is just a reference copy
+
+image: "docker.elastic.co/logstash/logstash"
+imageTag: "8.5.1"
+
+replicas: 1
+
+logstashPipeline:
+  logstash.conf: |
+    input {
+      beats {
+        port => 5044
+      }
+    }
+
+    filter {
+      json {
+        source => "message"
+        skip_on_invalid_json => true
+      }
+
+      if [ts] and ![timestamp] {
+        mutate {
+          copy => { "ts" => "timestamp" }
+        }
+      }
+
+      if ![endpoint] and [url] {
+        mutate {
+          copy => { "url" => "endpoint" }
+        }
+      }
+
+      if ![endpoint] and [message] {
+        grok {
+          match => {
+            "message" => [
+              "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{URIPATHPARAM:endpoint}\\s+latency=%{NUMBER:latency}",
+              "%{TIMESTAMP_ISO8601:timestamp}\\s+%{LOGLEVEL:level}\\s+%{DATA:endpoint}\\s+latency=%{NUMBER:latency}"
+            ]
+          }
+          tag_on_failure => []
+        }
+      }
+
+      if [timestamp] {
+        date {
+          match => ["timestamp", "ISO8601"]
+          target => "@timestamp"
+        }
+      }
+
+      if ![APP_ENV] and [kubernetes][labels][environment] {
+        mutate {
+          copy => { "[kubernetes][labels][environment]" => "APP_ENV" }
+        }
+      }
+
+      if ![APP_ENV] {
+        mutate {
+          add_field => { "APP_ENV" => "staging" }
+        }
+      }
+
+      if ![level] {
+        mutate {
+          add_field => { "level" => "INFO" }
+        }
+      }
+
+      mutate {
+        uppercase => ["level"]
+      }
+
+      if ![endpoint] {
+        mutate {
+          add_field => { "endpoint" => "unknown" }
+        }
+      }
+
+      if ![latency] {
+        mutate {
+          add_field => { "latency" => "0" }
+        }
+      }
+
+      mutate {
+        convert => { "latency" => "float" }
+      }
+
+      mutate {
+        add_field => { "[@metadata][target_index]" => "app-logs-%{APP_ENV}-%{+YYYY.MM.dd}" }
+      }
+    }
+
+    output {
+      elasticsearch {
+        hosts           => ["https://observability-lab-master:9200"]
+        user            => "${username}"
+        password        => "${password}"
+        ssl             => true
+        ssl_certificate_verification => false
+        index           => "%{[@metadata][target_index]}"
+        ilm_enabled     => false
+        manage_template => false
+      }
+    }
+
+envFrom:
+  - secretRef:
+      name: observability-lab-master-credentials
+
+logstashJavaOpts: "-Xmx512m -Xms512m"
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "768Mi"
+  limits:
+    cpu: "500m"
+    memory: "1Gi"
+
+persistence:
+  enabled: false
+
+service:
+  annotations: {}
+  type: ClusterIP
+  ports:
+    - name: beats
+      port: 5044
+      protocol: TCP
+      targetPort: 5044
+
+readinessProbe:
+  httpGet:
+    path: /
+    port: 9600
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6

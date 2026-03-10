@@ -1,0 +1,2 @@
+# prod overrides for elasticsearch
+# common values are in values.yaml.gotmpl

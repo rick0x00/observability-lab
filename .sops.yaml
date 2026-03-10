@@ -1,0 +1,6 @@
+# sops config for this repo (GCP KMS)
+creation_rules:
+  - path_regex: '.*\.enc\.sops\.ya?ml$'
+    gcp_kms: 'projects/rick0x00-com-1737423573185/locations/global/keyRings/observability-lab-sops/cryptoKeys/observability-lab-key'
+  - path_regex: '.*\.enc\.sops\.json$'
+    gcp_kms: 'projects/rick0x00-com-1737423573185/locations/global/keyRings/observability-lab-sops/cryptoKeys/observability-lab-key'

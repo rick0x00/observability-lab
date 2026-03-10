@@ -1,0 +1,2 @@
+# prod overrides for logstash
+# common values are in values.yaml.gotmpl

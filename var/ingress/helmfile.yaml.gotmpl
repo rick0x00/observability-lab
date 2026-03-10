@@ -1,0 +1,77 @@
+# repositories - both controllers available, only one gets installed based on CONTROLLER var
+repositories:
+  - name: ingress-nginx
+    url: https://kubernetes.github.io/ingress-nginx
+  - name: traefik
+    url: https://traefik.github.io/charts
+
+# default namespace
+templates:
+  default-release: &default-release
+    namespace: ingress-system
+
+# per-env kubeContext and controller selection
+environments:
+  dev:
+    values:
+      - kubeContext: default
+        controller: nginx
+        host: ""
+        releases:
+          ingress-nginx:
+            version: ""
+            <<: *default-release
+          traefik:
+            version: ""
+            <<: *default-release
+
+  stag:
+    values:
+      - kubeContext: k3s-stag
+        controller: nginx
+        host: ""
+        releases:
+          ingress-nginx:
+            version: ""
+            <<: *default-release
+          traefik:
+            version: ""
+            <<: *default-release
+
+  prod:
+    values:
+      - kubeContext: k8s-prod
+        controller: nginx
+        host: ""
+        releases:
+          ingress-nginx:
+            version: ""
+            <<: *default-release
+          traefik:
+            version: ""
+            <<: *default-release
+
+---
+# shared template
+templates:
+  default: &default
+    kubeContext: '{{ .Values.kubeContext }}'
+    version: '{{`{{ .Values | get "releases" | get .Release.Name | get "version" }}`}}'
+    namespace: '{{`{{ .Values | get "releases" | get .Release.Name | get "namespace" }}`}}'
+    values:
+      - ./{{`{{ .Release.Name }}`}}/values.yaml.gotmpl
+      - ./{{`{{ .Release.Name }}`}}/values-{{ .Environment.Name }}.yaml.gotmpl
+
+releases:
+  - chart: ingress-nginx/ingress-nginx
+    name: ingress-nginx
+    <<: *default
+    createNamespace: true
+    installed: {{ eq .Values.controller "nginx" }}
+
+  # k3s bundles traefik, task ingress:apply detects and skips this if already present
+  - chart: traefik/traefik
+    name: traefik
+    <<: *default
+    createNamespace: true
+    installed: {{ eq .Values.controller "traefik" }}

@@ -1,0 +1,54 @@
+version: "3"
+
+vars:
+  RUNNER_DIR: "{{.TASKFILE_DIR}}"
+  RUNNER_ENV: "{{.RUNNER_DIR}}/.env"
+  COMPOSE_FILE: "{{.RUNNER_DIR}}/docker-compose.yml"
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  init:
+    desc: Prepare runner files (.env and data dir)
+    cmds:
+      - mkdir -p "{{.RUNNER_DIR}}/runner-data"
+      - '[ -f "{{.RUNNER_ENV}}" ] || cp "{{.RUNNER_DIR}}/.env.example" "{{.RUNNER_ENV}}"'
+      - 'echo "runner env ready: {{.RUNNER_ENV}}"'
+      - 'echo "set REPO_URL and RUNNER_TOKEN before runner:up"'
+
+  up:
+    desc: Start GitHub runner container
+    deps: [init]
+    preconditions:
+      - sh: 'grep -q "^REPO_URL=https://github.com/" "{{.RUNNER_ENV}}"'
+        msg: "set REPO_URL in var/github-runner/.env"
+      - sh: '! grep -q "^RUNNER_TOKEN=CHANGE_ME" "{{.RUNNER_ENV}}"'
+        msg: "set RUNNER_TOKEN in var/github-runner/.env"
+      - sh: '[ -n "$(grep "^RUNNER_TOKEN=" "{{.RUNNER_ENV}}" | cut -d= -f2-)" ]'
+        msg: "RUNNER_TOKEN cannot be empty"
+    cmds:
+      - docker compose -f "{{.COMPOSE_FILE}}" --env-file "{{.RUNNER_ENV}}" up -d
+
+  down:
+    desc: Stop GitHub runner container
+    cmds:
+      - docker compose -f "{{.COMPOSE_FILE}}" --env-file "{{.RUNNER_ENV}}" down
+
+  restart:
+    desc: Restart GitHub runner container
+    cmds:
+      - task: down
+      - task: up
+
+  logs:
+    desc: Follow runner logs
+    cmds:
+      - docker compose -f "{{.COMPOSE_FILE}}" --env-file "{{.RUNNER_ENV}}" logs -f --tail=200
+
+  status:
+    desc: Show runner container status
+    cmds:
+      - docker compose -f "{{.COMPOSE_FILE}}" --env-file "{{.RUNNER_ENV}}" ps

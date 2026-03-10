@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# run all smoke tests and print pass/fail sumary
+# wraps check-app, check-metrics, check-logs, check-hpa
+# usage: ENV=dev KUBE_CONTEXT=default lab-validate
+
+set -euo pipefail
+
+SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate"
+PASS=0
+FAIL=0
+ENV_NAME="${ENV:-}"
+KUBE_CONTEXT="${KUBE_CONTEXT:-}"
+
+if [[ -z "${ENV_NAME}" ]]; then
+  echo "ENV is required. Example: ENV=dev task validate:all KUBE_CONTEXT=kind-local" >&2
+  exit 1
+fi
+
+if [[ -z "${KUBE_CONTEXT}" ]]; then
+  echo "KUBE_CONTEXT is required. Example: ENV=dev KUBE_CONTEXT=kind-local task validate:all" >&2
+  exit 1
+fi
+
+run_check() {
+  local name="$1"
+  local script="$2"
+  printf "  %-40s " "${name}..."
+  if bash "${script}" > /tmp/lab-validate-${name//[^a-z]/_}.log 2>&1; then
+    echo "PASS"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL"
+    echo "    -> see /tmp/lab-validate-${name//[^a-z]/_}.log"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+echo ""
+echo "=== Observability Lab Validation ==="
+echo ""
+echo "env:          ${ENV_NAME}"
+echo "kube_context: ${KUBE_CONTEXT}"
+echo ""
+
+run_check "app-endpoints"  "${SCRIPTS_DIR}/check-app.sh"
+run_check "metrics"        "${SCRIPTS_DIR}/check-metrics.sh"
+run_check "logs-pipeline"  "${SCRIPTS_DIR}/check-logs.sh"
+run_check "hpa-config"     "${SCRIPTS_DIR}/check-hpa.sh"
+
+echo ""
+echo "---------------------------------"
+echo "  Passed: ${PASS}"
+echo "  Failed: ${FAIL}"
+echo "---------------------------------"
+echo ""
+
+if [[ ${FAIL} -gt 0 ]]; then
+  echo "Some checks failed. See log files in /tmp/lab-validate-*.log"
+  exit 1
+else
+  echo "All checks passed."
+fi

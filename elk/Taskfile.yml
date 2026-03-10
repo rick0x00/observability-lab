@@ -1,0 +1,83 @@
+version: "3"
+
+# ELK stack: ES, Kibana, Logstash, Filebeat
+# kibana helm hooks leave junk on failed installs, clean up before each sync
+vars:
+  SCRIPTS_DIR: var/scripts
+  KUBE_CONTEXT_INPUT: '{{.KUBE_CONTEXT | default (env "KUBE_CONTEXT")}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  apply:
+    desc: Deploy ELK stack (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task elk:apply ENV=dev [KUBE_CONTEXT=kind-local]"
+      - sh: 'command -v sops >/dev/null 2>&1'
+        msg: "sops is required (run task bootstrap:sops-gcp)"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        for release in kibana filebeat; do
+          release_status="$(helm status "${release}" -n logging 2>/dev/null || true)"
+          if [ -n "${release_status}" ] && printf '%s\n' "${release_status}" | grep -q '^STATUS: failed'; then
+            echo "removing failed release: ${release}"
+            helm uninstall "${release}" -n logging || true
+          fi
+        done
+        echo "cleaning stale kibana hook resources..."
+        for stale_job in $(kubectl --context "${kube_context}" -n logging get jobs -o name 2>/dev/null | grep -E 'pre-install-kibana-kibana|post-delete-kibana-kibana' || true); do
+          kubectl --context "${kube_context}" -n logging delete "${stale_job}" --ignore-not-found=true || true
+        done
+        kubectl --context "${kube_context}" -n logging delete configmap kibana-kibana-helm-scripts --ignore-not-found=true || true
+        kubectl --context "${kube_context}" -n logging delete secret kibana-kibana-es-token --ignore-not-found=true || true
+        kubectl --context "${kube_context}" -n logging delete serviceaccount pre-install-kibana-kibana --ignore-not-found=true || true
+        kubectl --context "${kube_context}" -n logging delete role pre-install-kibana-kibana --ignore-not-found=true || true
+        kubectl --context "${kube_context}" -n logging delete rolebinding pre-install-kibana-kibana --ignore-not-found=true || true
+        for stale_pod in $(kubectl --context "${kube_context}" -n logging get pods -o name 2>/dev/null | grep -E 'pre-install-kibana-kibana|post-delete-kibana-kibana' || true); do
+          kubectl --context "${kube_context}" -n logging delete "${stale_pod}" --ignore-not-found=true || true
+        done
+
+        if kubectl --context "${kube_context}" -n logging get statefulset/observability-lab-master >/dev/null 2>&1; then
+          bash {{.SCRIPTS_DIR}}/ensure-elasticsearch-auth.sh "${kube_context}"
+        fi
+
+        bash {{.SCRIPTS_DIR}}/with-sops-gcp.sh helmfile -f elk/helmfile.yaml.gotmpl -e "${env_name}" --state-values-set kubeContext="${kube_context}" sync
+
+        bash {{.SCRIPTS_DIR}}/ensure-elasticsearch-auth.sh "${kube_context}"
+
+        kubectl --context "${kube_context}" apply -f elk/ingress/kibana-ingress.yaml
+        kubectl --context "${kube_context}" -n logging rollout restart statefulset/logstash-logstash || true
+        kubectl --context "${kube_context}" -n logging rollout status statefulset/logstash-logstash --timeout=600s || echo "logstash rollout still converging, continuing..."
+        kubectl --context "${kube_context}" -n logging rollout restart deployment/kibana-kibana
+        kubectl --context "${kube_context}" -n logging rollout status deployment/kibana-kibana --timeout=300s
+        bash {{.SCRIPTS_DIR}}/import-kibana-dashboard.sh "${kube_context}" elk/kibana-dashboard.json
+        bash {{.SCRIPTS_DIR}}/import-kibana-alert.sh "${kube_context}" elk/kibana-alert-rule.json
+      - 'echo "access kibana: task elk:pf-kibana ENV={{.ENV}} KUBE_CONTEXT={{.KUBE_CONTEXT_INPUT}}"'
+
+  status:
+    desc: Show ELK pod status (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task elk:status ENV=dev [KUBE_CONTEXT=kind-local]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" get pods -n logging
+        kubectl --context "${kube_context}" get svc -n logging
+        kubectl --context "${kube_context}" get ingress -n logging kibana
+
+  pf-kibana:
+    desc: Port-forward Kibana to localhost:5601 (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task elk:pf-kibana ENV=dev [KUBE_CONTEXT=kind-local]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        echo "Kibana: http://localhost:5601  (no auth)"
+        kubectl --context "${kube_context}" port-forward -n logging svc/kibana-kibana 5601:5601

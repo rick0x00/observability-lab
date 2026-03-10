@@ -1,0 +1,50 @@
+version: "3"
+
+# bootstrap runs in order, marker files prevent re-runing steps
+vars:
+  SCRIPTS_DIR: var/scripts/bootstrap
+  ROOT_SH: '{{if eq (env "USER") "root"}}bash{{else}}sudo -E bash{{end}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  sops-gcp:
+    desc: Install sops and gcloud sdk
+    cmds:
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/08-sops-gcp.sh'
+
+  all-kind:
+    desc: Full bootstrap sequence for local kind cluster
+    cmds:
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/00-base.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/01-docker.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/02-kubectl.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/03-helm.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/05-tools.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/08-sops-gcp.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/06-kind.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/07-kind-cluster.sh'
+
+  all-k3s:
+    desc: Full bootstrap sequence for k3s cluster
+    cmds:
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/00-base.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/01-docker.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/02-kubectl.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/03-helm.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/05-tools.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/08-sops-gcp.sh'
+      - '{{.ROOT_SH}} {{.SCRIPTS_DIR}}/04-k3s.sh'
+
+  all:
+    desc: Default bootstrap sequence (k3s single-node)
+    cmds:
+      - task: all-k3s
+
+  github-runner:
+    desc: Prepare github runner files in /var/github-runner
+    cmds:
+      - task: :runner:init

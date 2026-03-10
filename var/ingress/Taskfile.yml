@@ -1,0 +1,35 @@
+version: "3"
+
+# nginx or traefik ingress, CONTROLLER var selects wich one
+# k3s ships with traefik already so we detect and skip install if its already there
+vars:
+  SCRIPTS_DIR: var/scripts
+  CONTROLLER_INPUT: '{{.CONTROLLER | default (env "CONTROLLER") | default "nginx"}}'
+  KUBE_CONTEXT_INPUT: '{{.KUBE_CONTEXT | default (env "KUBE_CONTEXT")}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  apply:
+    desc: Deploy ingress controller via Helmfile (ENV required, CONTROLLER=nginx|traefik)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task ingress:apply ENV=dev [KUBE_CONTEXT=default] [CONTROLLER=nginx]"
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/ingress-op.sh "{{.ENV}}" "{{.CONTROLLER_INPUT}}" "{{.KUBE_CONTEXT_INPUT}}" sync
+
+  status:
+    desc: Show ingress controller status (ENV required, CONTROLLER=nginx|traefik)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task ingress:status ENV=dev [KUBE_CONTEXT=default] [CONTROLLER=nginx]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" get ingressclass
+        kubectl --context "${kube_context}" get ingress -A
+        kubectl --context "${kube_context}" get pods -A | grep -E 'traefik|ingress-nginx' || true
+        kubectl --context "${kube_context}" get svc -A | grep -E 'traefik|ingress-nginx' || true

@@ -1,0 +1,33 @@
+name: observability-lab-local-self-hosted
+
+stages:
+  - name: Lint
+    runner: any
+    commands:
+      - bash ci/scripts/lint.sh
+
+  - name: Build
+    runner: any
+    commands:
+      - bash ci/scripts/build.sh
+
+  - name: Push
+    runner: any
+    commands:
+      - bash ci/scripts/push.sh
+
+  - name: Deploy
+    runner: self-hosted-local
+    commands:
+      - bash ci/scripts/deploy.sh
+
+requirements:
+  deploy_runner_labels:
+    - self-hosted
+    - local
+
+order:
+  - Lint
+  - Build
+  - Push
+  - Deploy

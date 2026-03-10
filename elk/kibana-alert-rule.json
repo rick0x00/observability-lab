@@ -1,0 +1,48 @@
+{
+  "connector": {
+    "name": "observability-server-log",
+    "connector_type_id": ".server-log",
+    "config": {},
+    "secrets": {}
+  },
+  "rule": {
+    "name": "observability-errors-20-in-5m",
+    "rule_type_id": ".es-query",
+    "consumer": "alerts",
+    "schedule": {
+      "interval": "1m"
+    },
+    "params": {
+      "size": 0,
+      "excludeHitsFromPreviousRun": true,
+      "searchType": "esQuery",
+      "esQuery": "{\"query\":{\"bool\":{\"filter\":[{\"term\":{\"level.keyword\":\"ERROR\"}}]}}}",
+      "index": [
+        "app-logs-*"
+      ],
+      "timeField": "@timestamp",
+      "thresholdComparator": ">=",
+      "threshold": [
+        20
+      ],
+      "timeWindowSize": 5,
+      "timeWindowUnit": "m"
+    },
+    "actions": [
+      {
+        "group": "query matched",
+        "id": "__CONNECTOR_ID__",
+        "params": {
+          "message": "[observability] {{rule.name}} triggered. Errors in last 5m: {{context.value}}"
+        }
+      }
+    ],
+    "notify_when": "onThrottleInterval",
+    "throttle": "5m",
+    "tags": [
+      "observability",
+      "errors"
+    ],
+    "enabled": true
+  }
+}

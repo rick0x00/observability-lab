@@ -1,0 +1,58 @@
+# no helm repo needed - app is deployed via kustomize, not a chart
+repositories:
+  - name: bedag
+    url: https://bedag.github.io/helm-charts
+
+# default namespace
+templates:
+  default-release: &default-release
+    namespace: app
+
+# per-env kubeContext and overlay path
+environments:
+  dev:
+    values:
+      - kubeContext: default
+        host: ""
+        overlayPath: ./k8s/overlays/dev
+        releases:
+          observability-app-kustomize:
+            version: ""
+            <<: *default-release
+
+  stag:
+    values:
+      - kubeContext: k3s-stag
+        host: ""
+        overlayPath: ./k8s/overlays/stag
+        releases:
+          observability-app-kustomize:
+            version: ""
+            <<: *default-release
+
+  prod:
+    values:
+      - kubeContext: k8s-prod
+        host: ""
+        overlayPath: ./k8s/overlays/prod
+        releases:
+          observability-app-kustomize:
+            version: ""
+            <<: *default-release
+
+---
+# shared template
+templates:
+  default: &default
+    kubeContext: '{{ .Values.kubeContext }}'
+    version: '{{`{{ .Values | get "releases" | get .Release.Name | get "version" }}`}}'
+    namespace: '{{`{{ .Values | get "releases" | get .Release.Name | get "namespace" }}`}}'
+    values:
+      - resources: []
+
+releases:
+  # bedag/raw is a no-op chart - real deploy is done by kubectl kustomize in k8s:apply task
+  - chart: bedag/raw
+    name: observability-app-kustomize
+    <<: *default
+    createNamespace: true

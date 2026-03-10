@@ -1,0 +1,58 @@
+version: "3"
+
+vars:
+  SA_FILE: '{{.SA_FILE | default (env "SA_FILE") | default "keys/gcp-service-account.json"}}'
+  GCP_PROJECT: '{{.GCP_PROJECT | default (env "GCP_PROJECT")}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  auth:
+    desc: Configure local gcloud auth for SOPS (uses plain local key)
+    preconditions:
+      - sh: 'command -v gcloud >/dev/null 2>&1'
+        msg: "gcloud not found (run task bootstrap:sops-gcp)"
+    cmds:
+      - |
+        set -euo pipefail
+        sa_file="{{.SA_FILE}}"
+        if [[ ! -f "${sa_file}" ]]; then
+          sa_file="$(ls -1 keys/*.json .keys/*.json 2>/dev/null | head -n 1 || true)"
+        fi
+        if [[ -z "${sa_file}" || ! -f "${sa_file}" ]]; then
+          echo "service account file not found. expected keys/gcp-service-account.json" >&2
+          exit 1
+        fi
+        project="{{.GCP_PROJECT}}"
+        if [[ -z "${project}" ]]; then
+          project="$(jq -r '.project_id // empty' "${sa_file}")"
+        fi
+        if [[ -z "${project}" ]]; then
+          echo "could not resolve project id from ${sa_file}" >&2
+          exit 1
+        fi
+        gcloud auth activate-service-account --key-file "${sa_file}" >/dev/null
+        gcloud config set project "${project}" >/dev/null
+        echo "gcloud auth ok, project=${project}"
+
+  validate:
+    desc: Check if all encrypted values can be decrypted with current local auth
+    preconditions:
+      - sh: 'command -v sops >/dev/null 2>&1'
+        msg: "sops not found (run task bootstrap:sops-gcp)"
+    cmds:
+      - |
+        set -euo pipefail
+        files="$(find . -type f \( -name "*.enc.sops.yaml" -o -name "*.enc.sops.yml" \))"
+        if [[ -z "${files}" ]]; then
+          echo "no encrypted files found"
+          exit 1
+        fi
+        echo "${files}" | while read -r f; do
+          [[ -z "${f}" ]] && continue
+          bash var/scripts/with-sops-gcp.sh sops --decrypt "${f}" >/dev/null
+          echo "ok: ${f}"
+        done

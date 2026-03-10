@@ -1,0 +1,61 @@
+version: "3"
+
+# kube-prometheus-stack + grafana dashboard import
+vars:
+  SCRIPTS_DIR: var/scripts
+  KUBE_CONTEXT_INPUT: '{{.KUBE_CONTEXT | default (env "KUBE_CONTEXT")}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  apply:
+    desc: Deploy kube-prometheus-stack (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task monitoring:apply ENV=dev [KUBE_CONTEXT=kind-local]"
+      - sh: 'command -v sops >/dev/null 2>&1'
+        msg: "sops is required (run task bootstrap:sops-gcp)"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        bash {{.SCRIPTS_DIR}}/with-sops-gcp.sh helmfile -f monitoring/helmfile.yaml.gotmpl -e "${env_name}" --state-values-set kubeContext="${kube_context}" sync
+        kubectl --context "${kube_context}" apply -f monitoring/ingress/grafana-ingress.yaml
+        bash {{.SCRIPTS_DIR}}/import-grafana-dashboard.sh "${kube_context}" monitoring/grafana-dashboard.json
+      - 'echo "access grafana: task monitoring:pf-grafana ENV={{.ENV}} KUBE_CONTEXT={{.KUBE_CONTEXT_INPUT}}"'
+
+  status:
+    desc: Show monitoring pod status (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task monitoring:status ENV=dev [KUBE_CONTEXT=kind-local]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" get pods -n monitoring
+        kubectl --context "${kube_context}" get ingress -n monitoring grafana
+
+  pf-grafana:
+    desc: Port-forward Grafana to localhost:3000 (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task monitoring:pf-grafana ENV=dev [KUBE_CONTEXT=kind-local]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        grafana_pass="$(kubectl --context "${kube_context}" -n monitoring get secret kube-prometheus-stack-grafana -o jsonpath='{.data.admin-password}' | base64 -d 2>/dev/null || true)"
+        echo "Grafana: http://localhost:3000  (user=admin pass=${grafana_pass:-<unknown>})"
+        kubectl --context "${kube_context}" port-forward -n monitoring svc/kube-prometheus-stack-grafana 3000:80
+
+  pf-prometheus:
+    desc: Port-forward Prometheus to localhost:9090 (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task monitoring:pf-prometheus ENV=dev [KUBE_CONTEXT=kind-local]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        echo "Prometheus: http://localhost:9090"
+        kubectl --context "${kube_context}" port-forward -n monitoring svc/kube-prometheus-stack-prometheus 9090:9090

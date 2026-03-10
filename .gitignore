@@ -1,0 +1,19 @@
+# Environment files
+.env
+.env.local
+var/github-runner/.env
+var/github-runner/runner-data/
+keys/
+kms/
+.kms/
+*.dec.sops.yaml
+*.dec.sops.yml
+*.dec.sops.json
+
+
+# vagrant
+.vagrant
+
+# Python cache
+__pycache__/
+*.pyc

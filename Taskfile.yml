@@ -1,0 +1,40 @@
+version: "3"
+
+# includes sub-taskfiles, all tasks are in those files
+includes:
+  k8s:
+    taskfile: ./k8s/Taskfile.yml
+    dir: .
+  monitoring:
+    taskfile: ./monitoring/Taskfile.yml
+    dir: .
+  elk:
+    taskfile: ./elk/Taskfile.yml
+    dir: .
+  bootstrap:
+    taskfile: ./var/scripts/bootstrap/Taskfile.yml
+    dir: .
+  validate:
+    taskfile: ./var/scripts/validate/Taskfile.yml
+    dir: .
+  lint:
+    taskfile: ./var/lint/Taskfile.yml
+    dir: .
+  deploy:
+    taskfile: ./var/deploy/Taskfile.yml
+    dir: .
+  ingress:
+    taskfile: ./var/ingress/Taskfile.yml
+    dir: .
+  runner:
+    taskfile: ./var/github-runner/Taskfile.yml
+    dir: .
+  sops:
+    taskfile: ./var/sops/Taskfile.yml
+    dir: .
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"

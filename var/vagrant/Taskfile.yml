@@ -1,0 +1,48 @@
+version: "3"
+
+vars:
+  VAGRANT_DIR: "{{.TASKFILE_DIR}}"
+  kubernetes_cluster_type: '{{.kubernetes_cluster_type | default (env "kubernetes_cluster_type") | default "k3s"}}'
+  VAGRANT_CMD: 'VAGRANT_CWD="{{.VAGRANT_DIR}}" kubernetes_cluster_type="{{.kubernetes_cluster_type}}" vagrant'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  up:
+    desc: Start and provision the VM (kubernetes_cluster_type=k3s|kind)
+    cmds:
+      - '{{.VAGRANT_CMD}} up'
+
+  provision:
+    desc: Re-run VM provisioning (kubernetes_cluster_type=k3s|kind)
+    cmds:
+      - '{{.VAGRANT_CMD}} provision'
+
+  reload:
+    desc: Restart the VM and apply Vagrantfile changes (kubernetes_cluster_type=k3s|kind)
+    cmds:
+      - '{{.VAGRANT_CMD}} reload'
+
+  status:
+    desc: Show VM status
+    cmds:
+      - '{{.VAGRANT_CMD}} status'
+
+  ssh:
+    desc: SSH into the VM
+    cmds:
+      - '{{.VAGRANT_CMD}} ssh'
+
+  halt:
+    desc: Stop the VM
+    cmds:
+      - '{{.VAGRANT_CMD}} halt'
+
+  destroy:
+    desc: Destroy the VM
+    prompt: "Destroy observability-lab VM?"
+    cmds:
+      - '{{.VAGRANT_CMD}} destroy -f'

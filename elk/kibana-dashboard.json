@@ -1,0 +1,200 @@
+[
+  {
+    "type": "index-pattern",
+    "id": "app-logs-all",
+    "attributes": {
+      "title": "app-logs-*",
+      "timeFieldName": "@timestamp",
+      "fields": "[]"
+    },
+    "references": [],
+    "migrationVersion": {
+      "index-pattern": "8.0.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  },
+  {
+    "type": "visualization",
+    "id": "observability-log-volume-by-level",
+    "attributes": {
+      "title": "Log Volume by Level",
+      "visState": "{\"title\":\"Log Volume by Level\",\"type\":\"pie\",\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}},{\"id\":\"2\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"segment\",\"params\":{\"field\":\"level.keyword\",\"size\":10,\"order\":\"desc\",\"orderBy\":\"1\"}}],\"params\":{\"type\":\"pie\",\"addTooltip\":true,\"legendPosition\":\"right\",\"isDonut\":true,\"palette\":{\"type\":\"palette\",\"name\":\"kibana_palette\"},\"distinctColors\":true,\"legendDisplay\":\"show\",\"legendSize\":\"auto\"}}",
+      "uiStateJSON": "{}",
+      "description": "Distribution of log events by log level",
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\",\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+      }
+    },
+    "references": [
+      {
+        "id": "app-logs-all",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "migrationVersion": {
+      "visualization": "8.5.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  },
+  {
+    "type": "visualization",
+    "id": "observability-top-endpoints",
+    "attributes": {
+      "title": "Top Endpoints",
+      "visState": "{\"title\":\"Top Endpoints\",\"type\":\"table\",\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}},{\"id\":\"2\",\"enabled\":true,\"type\":\"terms\",\"schema\":\"bucket\",\"params\":{\"field\":\"endpoint.keyword\",\"size\":15,\"order\":\"desc\",\"orderBy\":\"1\",\"customLabel\":\"Endpoint\"}}],\"params\":{\"perPage\":10,\"showPartialRows\":false,\"showTotal\":true,\"totalFunc\":\"sum\",\"showToolbar\":true}}",
+      "uiStateJSON": "{}",
+      "description": "Most frequently accessed endpoints",
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\",\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+      }
+    },
+    "references": [
+      {
+        "id": "app-logs-all",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "migrationVersion": {
+      "visualization": "8.5.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  },
+  {
+    "type": "visualization",
+    "id": "observability-errors-over-time",
+    "attributes": {
+      "title": "Errors Over Time",
+      "visState": "{\"title\":\"Errors Over Time\",\"type\":\"line\",\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}},{\"id\":\"2\",\"enabled\":true,\"type\":\"date_histogram\",\"schema\":\"segment\",\"params\":{\"field\":\"@timestamp\",\"interval\":\"auto\",\"min_doc_count\":1,\"customLabel\":\"Time\"}}],\"params\":{\"type\":\"line\",\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"palette\":{\"type\":\"palette\",\"name\":\"kibana_palette\"},\"isVislibVis\":true,\"detailedTooltip\":true,\"fittingFunction\":\"linear\",\"legendSize\":\"auto\"},\"filter\":{\"query\":\"level : \\\"ERROR\\\"\",\"language\":\"kuery\"}}",
+      "uiStateJSON": "{}",
+      "description": "Number of ERROR-level log events over time",
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\",\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+      }
+    },
+    "references": [
+      {
+        "id": "app-logs-all",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "migrationVersion": {
+      "visualization": "8.5.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  },
+  {
+    "type": "visualization",
+    "id": "observability-latency-histogram",
+    "attributes": {
+      "title": "Latency Histogram",
+      "visState": "{\"title\":\"Latency Histogram\",\"type\":\"histogram\",\"aggs\":[{\"id\":\"1\",\"enabled\":true,\"type\":\"count\",\"schema\":\"metric\",\"params\":{}},{\"id\":\"2\",\"enabled\":true,\"type\":\"histogram\",\"schema\":\"segment\",\"params\":{\"field\":\"latency\",\"interval\":50,\"min_doc_count\":false,\"customLabel\":\"Latency (ms)\"}}],\"params\":{\"type\":\"histogram\",\"addTooltip\":true,\"addLegend\":true,\"legendPosition\":\"right\",\"palette\":{\"type\":\"palette\",\"name\":\"kibana_palette\"},\"isVislibVis\":true,\"detailedTooltip\":true,\"legendSize\":\"auto\"}}",
+      "uiStateJSON": "{}",
+      "description": "Distribution of endpoint latency in milliseconds",
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\",\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+      }
+    },
+    "references": [
+      {
+        "id": "app-logs-all",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "migrationVersion": {
+      "visualization": "8.5.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  },
+  {
+    "type": "search",
+    "id": "observability-log-explorer",
+    "attributes": {
+      "title": "Log Explorer",
+      "description": "Discover-style view of raw logs",
+      "columns": [
+        "@timestamp",
+        "level",
+        "endpoint",
+        "latency",
+        "APP_ENV",
+        "message"
+      ],
+      "sort": [
+        [
+          "@timestamp",
+          "desc"
+        ]
+      ],
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"indexRefName\":\"kibanaSavedObjectMeta.searchSourceJSON.index\",\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+      }
+    },
+    "references": [
+      {
+        "id": "app-logs-all",
+        "name": "kibanaSavedObjectMeta.searchSourceJSON.index",
+        "type": "index-pattern"
+      }
+    ],
+    "migrationVersion": {
+      "search": "8.0.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  },
+  {
+    "type": "dashboard",
+    "id": "observability-logs-dashboard",
+    "attributes": {
+      "title": "Observability Logs Dashboard",
+      "description": "Level distribution, top endpoints, error trend, latency histogram and log explorer",
+      "hits": 0,
+      "timeRestore": false,
+      "timeFrom": "now-1h",
+      "timeTo": "now",
+      "refreshInterval": {
+        "pause": false,
+        "value": 30000
+      },
+      "kibanaSavedObjectMeta": {
+        "searchSourceJSON": "{\"query\":{\"query\":\"\",\"language\":\"kuery\"},\"filter\":[]}"
+      },
+      "panelsJSON": "[{\"version\":\"8.0.0\",\"type\":\"visualization\",\"gridData\":{\"x\":0,\"y\":0,\"w\":24,\"h\":10,\"i\":\"1\"},\"panelIndex\":\"1\",\"panelRefName\":\"panel_1\"},{\"version\":\"8.0.0\",\"type\":\"visualization\",\"gridData\":{\"x\":24,\"y\":0,\"w\":24,\"h\":10,\"i\":\"2\"},\"panelIndex\":\"2\",\"panelRefName\":\"panel_2\"},{\"version\":\"8.0.0\",\"type\":\"visualization\",\"gridData\":{\"x\":0,\"y\":10,\"w\":24,\"h\":10,\"i\":\"3\"},\"panelIndex\":\"3\",\"panelRefName\":\"panel_3\"},{\"version\":\"8.0.0\",\"type\":\"visualization\",\"gridData\":{\"x\":24,\"y\":10,\"w\":24,\"h\":10,\"i\":\"4\"},\"panelIndex\":\"4\",\"panelRefName\":\"panel_4\"},{\"version\":\"8.0.0\",\"type\":\"search\",\"gridData\":{\"x\":0,\"y\":20,\"w\":48,\"h\":16,\"i\":\"5\"},\"panelIndex\":\"5\",\"panelRefName\":\"panel_5\"}]",
+      "optionsJSON": "{\"hidePanelTitles\":false,\"useMargins\":true}"
+    },
+    "references": [
+      {
+        "name": "panel_1",
+        "type": "visualization",
+        "id": "observability-log-volume-by-level"
+      },
+      {
+        "name": "panel_2",
+        "type": "visualization",
+        "id": "observability-top-endpoints"
+      },
+      {
+        "name": "panel_3",
+        "type": "visualization",
+        "id": "observability-errors-over-time"
+      },
+      {
+        "name": "panel_4",
+        "type": "visualization",
+        "id": "observability-latency-histogram"
+      },
+      {
+        "name": "panel_5",
+        "type": "search",
+        "id": "observability-log-explorer"
+      }
+    ],
+    "migrationVersion": {
+      "dashboard": "8.5.0"
+    },
+    "coreMigrationVersion": "8.5.1"
+  }
+]

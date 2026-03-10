@@ -1,0 +1,23 @@
+# traefik values - only installed if k3s builtin traefik is not detected
+deployment:
+  replicas: 1
+
+ingressClass:
+  enabled: true
+  name: traefik
+  isDefaultClass: false
+
+providers:
+  kubernetesIngress:
+    enabled: true
+
+service:
+  type: NodePort
+
+metrics:
+  prometheus:
+    enabled: true
+
+logs:
+  general:
+    level: INFO

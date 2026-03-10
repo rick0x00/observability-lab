@@ -1,0 +1,119 @@
+version: "3"
+
+vars:
+  SCRIPTS_DIR: var/scripts
+  # IMAGE_FULL is computed here so tasks dont have to repeat it
+  REGISTRY: '{{.DOCKERHUB_USER | default (env "DOCKERHUB_USER") | default "rick0x00"}}'
+  IMAGE_NAME: observability-lab
+  IMAGE_TAG: '{{.IMAGE_TAG | default (env "IMAGE_TAG") | default "latest"}}'
+  IMAGE_FULL_INPUT: '{{.IMAGE_FULL | default (env "IMAGE_FULL")}}'
+  IMAGE_FULL: '{{.IMAGE_FULL_INPUT | default (printf "%s/%s:%s" .REGISTRY .IMAGE_NAME .IMAGE_TAG)}}'
+  KUBE_CONTEXT_INPUT: '{{.KUBE_CONTEXT | default (env "KUBE_CONTEXT")}}'
+
+tasks:
+  default:
+    silent: true
+    cmds:
+      - task --list-all -t "{{.TASKFILE}}"
+
+  apply:
+    desc: Deploy app via Kustomize overlay (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:apply ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        overlay_path="k8s/overlays/${env_name}"
+        helmfile -f k8s/helmfile.yaml.gotmpl -e "${env_name}" --state-values-set kubeContext="${kube_context}" --state-values-set overlayPath="${overlay_path}" sync
+        kubectl kustomize "${overlay_path}" --load-restrictor=LoadRestrictionsNone | kubectl --context "${kube_context}" apply -f -
+        kubectl --context "${kube_context}" apply -f k8s/ingress/observability-app-ingress.yaml
+        if [ -n "{{.IMAGE_FULL}}" ]; then
+          kubectl --context "${kube_context}" -n app set image deployment/observability-app observability-app="{{.IMAGE_FULL}}"
+        fi
+      - task: rollout
+        vars:
+          ENV: "{{.ENV}}"
+          KUBE_CONTEXT: "{{.KUBE_CONTEXT_INPUT}}"
+
+  rollout:
+    desc: Wait for app rollout (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:rollout ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" rollout status deployment/observability-app -n app --timeout=180s
+
+  status:
+    desc: Show app status (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:status ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" get pods -n app -o wide
+        kubectl --context "${kube_context}" get svc -n app
+        kubectl --context "${kube_context}" get hpa -n app
+        kubectl --context "${kube_context}" get ingress -n app observability-app
+
+  logs:
+    desc: Tail app logs (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:logs ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" logs -n app -l app=observability-app -c observability-app -f
+
+  restart:
+    desc: Rolling restart of app (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:restart ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        kubectl --context "${kube_context}" rollout restart deployment/observability-app -n app
+      - task: rollout
+        vars:
+          ENV: "{{.ENV}}"
+          KUBE_CONTEXT: "{{.KUBE_CONTEXT_INPUT}}"
+
+  pf-app:
+    desc: Port-forward app to localhost:8080 (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:pf-app ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        echo "App: http://localhost:8080"
+        kubectl --context "${kube_context}" port-forward -n app svc/observability-app 8080:8080
+
+  load-start:
+    desc: Generate traffic against app (ENV required, default 120s)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:load-start ENV=dev [KUBE_CONTEXT=default] [DURATION=60]"
+    vars:
+      DURATION: '{{.DURATION | default "120"}}'
+    cmds:
+      - |
+        . {{.SCRIPTS_DIR}}/kube-env.sh "{{.ENV}}" "{{.KUBE_CONTEXT_INPUT}}"
+        KUBE_CONTEXT="${kube_context}" bash {{.SCRIPTS_DIR}}/lab-load --duration {{.DURATION}}
+
+  load-quick:
+    desc: Quick 30s load burst (ENV required)
+    preconditions:
+      - sh: '[ -n "{{.ENV}}" ]'
+        msg: "ENV is required -- usage: task k8s:load-quick ENV=dev [KUBE_CONTEXT=default]"
+    cmds:
+      - task: load-start
+        vars:
+          ENV: "{{.ENV}}"
+          KUBE_CONTEXT: "{{.KUBE_CONTEXT_INPUT}}"
+          DURATION: "30"

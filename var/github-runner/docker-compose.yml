@@ -10,7 +10,7 @@ services:
     environment:
       RUNNER_SCOPE: repo
       RUNNER_NAME: ${RUNNER_NAME:-observability-lab-vm}
-      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/tmp/runner/work}
+      RUNNER_WORKDIR: ${RUNNER_WORKDIR:-/tmp/runner/_work}
       LABELS: ${LABELS:-self-hosted,local}
       RUN_AS_ROOT: "true"
       DISABLE_AUTO_UPDATE: "true"

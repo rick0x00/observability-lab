@@ -93,6 +93,10 @@ jobs:
             chmod +x /usr/local/bin/kubectl
           fi
 
+          if ! command -v helm >/dev/null 2>&1; then
+            curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          fi
+
           if ! command -v helmfile >/dev/null 2>&1; then
             curl -fsSL https://github.com/helmfile/helmfile/releases/download/v0.167.1/helmfile_0.167.1_linux_amd64.tar.gz -o /tmp/helmfile.tar.gz
             tar -xzf /tmp/helmfile.tar.gz -C /usr/local/bin helmfile
